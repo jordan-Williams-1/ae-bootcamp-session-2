@@ -1,125 +1,113 @@
 import React, { useState, useEffect } from 'react';
+import { TaskForm } from './components/TaskForm';
+import { TaskList } from './components/TaskList';
+import { useTasks } from './hooks/useTasks';
 import './App.css';
 
 function App() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [newItem, setNewItem] = useState('');
+  const {
+    tasks,
+    loading,
+    error,
+    fetchTasks,
+    createTask,
+    updateTask,
+    toggleTaskComplete,
+    deleteTask,
+  } = useTasks();
+
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchTasks();
+  }, [fetchTasks]);
 
-  const fetchData = async () => {
+  const editingTask = editingTaskId ? tasks.find(t => t.id === editingTaskId) : null;
+
+  const handleFormSubmit = async (formData) => {
     try {
-      setLoading(true);
-      const response = await fetch('/api/items');
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
+      setSubmitLoading(true);
+      setSubmitError('');
+
+      if (editingTaskId) {
+        await updateTask(editingTaskId, formData);
+        setEditingTaskId(null);
+      } else {
+        await createTask(formData.title, formData.dueDate);
       }
-      const result = await response.json();
-      setData(result);
-      setError(null);
     } catch (err) {
-      setError('Failed to fetch data: ' + err.message);
-      console.error('Error fetching data:', err);
+      setSubmitError(err.message);
+      throw err;
     } finally {
-      setLoading(false);
+      setSubmitLoading(false);
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!newItem.trim()) return;
+  const handleEditTask = (taskId) => {
+    setEditingTaskId(taskId);
+    // Scroll to form
+    setTimeout(() => {
+      document.querySelector('.task-form')?.scrollIntoView({ behavior: 'smooth' });
+    }, 0);
+  };
 
+  const handleCancelEdit = () => {
+    setEditingTaskId(null);
+    setSubmitError('');
+  };
+
+  const handleToggleComplete = async (taskId) => {
     try {
-      const response = await fetch('/api/items', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: newItem }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to add item');
-      }
-
-      const result = await response.json();
-      setData([...data, result]);
-      setNewItem('');
+      await toggleTaskComplete(taskId);
     } catch (err) {
-      setError('Error adding item: ' + err.message);
-      console.error('Error adding item:', err);
+      console.error('Error toggling task:', err);
     }
   };
 
-  const handleDelete = async (itemId) => {
-    try {
-      const response = await fetch(`/api/items/${itemId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete item');
+  const handleDeleteTask = async (taskId) => {
+    if (window.confirm('Are you sure you want to delete this task?')) {
+      try {
+        await deleteTask(taskId);
+      } catch (err) {
+        console.error('Error deleting task:', err);
       }
-
-      setData(data.filter(item => item.id !== itemId));
-      setError(null);
-    } catch (err) {
-      setError('Error deleting item: ' + err.message);
-      console.error('Error deleting item:', err);
     }
   };
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>To Do App</h1>
-        <p>Keep track of your tasks</p>
+    <div className="app">
+      <header className="app-header">
+        <h1>📝 My Tasks</h1>
+        <p>Keep track of everything you need to do</p>
       </header>
 
-      <main>
-        <section className="add-item-section">
-          <h2>Add New Item</h2>
-          <form onSubmit={handleSubmit}>
-            <input
-              type="text"
-              value={newItem}
-              onChange={(e) => setNewItem(e.target.value)}
-              placeholder="Enter item name"
-            />
-            <button type="submit">Add Item</button>
-          </form>
-        </section>
+      <main className="app-main">
+        <div className="app-container">
+          {error && <div className="error-banner">{error}</div>}
+          {submitError && <div className="error-banner">{submitError}</div>}
 
-        <section className="items-section">
-          <h2>Items from Database</h2>
-          {loading && <p>Loading data...</p>}
-          {error && <p className="error">{error}</p>}
-          {!loading && !error && (
-            <ul>
-              {data.length > 0 ? (
-                data.map((item) => (
-                  <li key={item.id}>
-                    <span>{item.name}</span>
-                    <button 
-                      onClick={() => handleDelete(item.id)}
-                      className="delete-btn"
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </li>
-                ))
-              ) : (
-                <p>No items found. Add some!</p>
-              )}
-            </ul>
-          )}
-        </section>
+          <TaskForm
+            task={editingTask}
+            onSubmit={handleFormSubmit}
+            onCancel={handleCancelEdit}
+            loading={submitLoading}
+          />
+
+          <TaskList
+            tasks={tasks}
+            onToggleComplete={handleToggleComplete}
+            onEdit={handleEditTask}
+            onDelete={handleDeleteTask}
+            loading={loading}
+          />
+        </div>
       </main>
+
+      <footer className="app-footer">
+        <p>Built with React • Task Manager v1.0</p>
+      </footer>
     </div>
   );
 }
